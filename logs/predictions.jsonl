@@ -1,0 +1,2 @@
+{"timestamp": "2026-02-11T19:47:09.406644", "prediction": -1.0920833333333333, "confidence": 0.8738895438904485, "risk": "Alto", "input_data": {"INDE_22": 5.783, "IDA": 4.0, "IEG": 4.1, "Fase": 7, "Idade_22": 19}}
+{"timestamp": "2026-02-16T23:38:04.222029", "prediction": -1.0804074074074075, "confidence": 0.8786091063628064, "risk": "Alto", "input_data": {"INDE_22": 7.2, "IDA": 6.3, "IEG": 8.3, "Fase": 2, "Idade_22": 12}}

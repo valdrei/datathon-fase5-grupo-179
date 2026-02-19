@@ -1,0 +1,48 @@
+# Configurações do Projeto Passos Mágicos
+
+# Configurações do Modelo
+model:
+  name: "random_forest"
+  hyperparameter_tuning: true
+  test_size: 0.2
+  cv_folds: 5
+  random_state: 42
+
+# Diretórios
+paths:
+  data: "./data"
+  models: "./models"
+  logs: "./logs"
+  config: "./config"
+
+# Arquivos de dados (exportados do Excel)
+data_files:
+  pede_2022: "data/PEDE2022.csv"
+  pede_2023: "data/PEDE2023.csv"
+  pede_2024: "data/PEDE2024.csv"
+  excel_original: "BASE DE DADOS PEDE 2024 - DATATHON.xlsx"
+
+# Configurações da API
+api:
+  host: "0.0.0.0"
+  port: 8000
+  reload: false
+  log_level: "info"
+
+# Monitoramento
+monitoring:
+  enable_drift_detection: true
+  drift_threshold: 0.05
+  psi_threshold: 0.25
+  enable_performance_logging: true
+
+# Logging
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+# Métricas de confiança
+confidence:
+  min_r2: 0.6
+  max_mae: 0.6
+  min_accuracy_tolerance: 50.0

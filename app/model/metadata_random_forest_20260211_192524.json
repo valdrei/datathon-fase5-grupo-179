@@ -1,0 +1,18 @@
+{
+    "model_name": "random_forest",
+    "timestamp": "20260211_192524",
+    "best_params": {
+        "max_depth": 15,
+        "min_samples_leaf": 2,
+        "min_samples_split": 5,
+        "n_estimators": 200
+    },
+    "metrics": {
+        "mse": 0.09394224265125353,
+        "rmse": 0.3064999880118326,
+        "mae": 0.209936429630561,
+        "r2": 0.8591461503930523,
+        "mape": 19.932165916028094
+    },
+    "model_filename": "model_random_forest_20260211_192524.pkl"
+}

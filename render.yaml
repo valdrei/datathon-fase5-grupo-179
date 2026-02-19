@@ -1,0 +1,24 @@
+# render.yaml — Blueprint para deploy no Render
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: passos-magicos
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    repo: # preencher com URL do repositório GitHub
+    branch: main
+    plan: free
+    envVars:
+      - key: API_URL
+        value: http://localhost:8000
+      - key: PORT
+        value: "10000"
+    healthCheckPath: /health
+    buildFilter:
+      paths:
+        - app/**
+        - src/**
+        - frontend/**
+        - Dockerfile
+        - requirements.txt
