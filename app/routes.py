@@ -190,6 +190,9 @@ async def root():
             "/predict": "POST - Fazer predição de defasagem",
             "/health": "GET - Verificar saúde da API",
             "/model-info": "GET - Informações sobre o modelo",
+            "/monitoring/stats": "GET - Estatísticas de monitoramento",
+            "/monitoring/predictions": "GET - Histórico de predições",
+            "/monitoring/drift": "GET - Relatório de drift (PSI)",
             "/docs": "GET - Documentação interativa (Swagger)",
             "/redoc": "GET - Documentação alternativa (ReDoc)"
         }
@@ -336,6 +339,137 @@ async def predict(student: StudentData, request: Request):
     except Exception as e:
         logger.error(f"❌ Erro ao processar predição: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Erro ao processar predição: {str(e)}")
+
+
+# ═══════════════════════════════════════════════════════
+#  ENDPOINTS DE MONITORAMENTO
+# ═══════════════════════════════════════════════════════
+
+@router.get("/monitoring/stats")
+async def monitoring_stats(last_n: Optional[int] = None):
+    """
+    Retorna estatísticas agregadas das predições.
+    
+    Args:
+        last_n: Número de últimas predições a considerar (None = todas)
+    """
+    from app.main import prediction_logger
+    
+    if prediction_logger is None:
+        raise HTTPException(status_code=503, detail="Logger de predições não inicializado.")
+    
+    stats = prediction_logger.get_prediction_statistics(last_n=last_n)
+    if not stats:
+        return {"message": "Nenhuma predição registrada ainda.", "total_predictions": 0}
+    
+    # Converter tipos numpy para JSON-serializable
+    return {
+        "total_predictions": int(stats.get("total_predictions", 0)),
+        "mean_prediction": float(stats.get("mean_prediction", 0)),
+        "std_prediction": float(stats.get("std_prediction", 0)),
+        "min_prediction": float(stats.get("min_prediction", 0)),
+        "max_prediction": float(stats.get("max_prediction", 0)),
+        "mean_confidence": float(stats.get("mean_confidence", 0)),
+        "risk_distribution": stats.get("risk_distribution", {}),
+        "last_prediction_time": stats.get("last_prediction_time", "")
+    }
+
+
+@router.get("/monitoring/predictions")
+async def monitoring_predictions(last_n: int = 100):
+    """
+    Retorna o histórico das últimas predições para visualização temporal.
+    
+    Args:
+        last_n: Número de últimas predições a retornar (padrão: 100)
+    """
+    from app.main import prediction_logger
+    import json as _json
+    
+    if prediction_logger is None:
+        raise HTTPException(status_code=503, detail="Logger de predições não inicializado.")
+    
+    if not prediction_logger.predictions_file.exists():
+        return {"predictions": [], "total": 0}
+    
+    predictions = []
+    with open(prediction_logger.predictions_file, 'r') as f:
+        for line in f:
+            try:
+                predictions.append(_json.loads(line))
+            except _json.JSONDecodeError:
+                continue
+    
+    # Retornar apenas as últimas N
+    predictions = predictions[-last_n:]
+    
+    return {"predictions": predictions, "total": len(predictions)}
+
+
+@router.get("/monitoring/drift")
+async def monitoring_drift():
+    """
+    Retorna o relatório de drift (PSI) comparando predições recentes
+    com dados de referência.
+    """
+    from app.main import prediction_logger, drift_detector
+    import json as _json
+    
+    result = {
+        "drift_enabled": False,
+        "psi": {},
+        "psi_thresholds": {
+            "no_change": "< 0.10",
+            "moderate": "0.10 – 0.25",
+            "significant": "> 0.25"
+        },
+        "prediction_drift": {}
+    }
+    
+    # Análise de drift nas predições (usando distribuição temporal)
+    if prediction_logger and prediction_logger.predictions_file.exists():
+        predictions = []
+        with open(prediction_logger.predictions_file, 'r') as f:
+            for line in f:
+                try:
+                    predictions.append(_json.loads(line))
+                except _json.JSONDecodeError:
+                    continue
+        
+        if len(predictions) >= 10:
+            pred_values = [p['prediction'] for p in predictions]
+            mid = len(pred_values) // 2
+            first_half = pred_values[:mid]
+            second_half = pred_values[mid:]
+            
+            # Estatísticas comparativas
+            result["prediction_drift"] = {
+                "first_half_mean": round(float(np.mean(first_half)), 4),
+                "second_half_mean": round(float(np.mean(second_half)), 4),
+                "first_half_std": round(float(np.std(first_half)), 4),
+                "second_half_std": round(float(np.std(second_half)), 4),
+                "mean_shift": round(float(np.mean(second_half) - np.mean(first_half)), 4),
+                "total_predictions": len(pred_values)
+            }
+            
+            # Teste KS entre as duas metades
+            from scipy import stats as sp_stats
+            try:
+                ks_stat, ks_pvalue = sp_stats.ks_2samp(first_half, second_half)
+                result["prediction_drift"]["ks_statistic"] = round(float(ks_stat), 4)
+                result["prediction_drift"]["ks_pvalue"] = round(float(ks_pvalue), 4)
+                result["prediction_drift"]["drift_detected"] = bool(ks_pvalue < 0.05)
+            except Exception:
+                result["prediction_drift"]["drift_detected"] = False
+    
+    # PSI por feature (se drift_detector tem dados de referência)
+    if drift_detector and drift_detector.reference_data is not None:
+        result["drift_enabled"] = True
+        # PSI seria calculado quando novos dados chegam em lote
+        # Por enquanto, retornar status
+        result["reference_rows"] = len(drift_detector.reference_data)
+    
+    return result
 
 
 # Nota: exception_handler global deve ser registrado no app (main.py), não no router

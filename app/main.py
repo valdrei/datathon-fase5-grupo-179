@@ -9,8 +9,8 @@ import joblib
 import logging
 import sys
 
-# Adicionar diretórios ao path
-sys.path.append(str(Path(__file__).parent.parent / "src"))
+# Adicionar diretório raiz ao path para permitir imports como 'from src.xxx'
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.preprocessing import DataPreprocessor
 from src.feature_engineering import FeatureEngineer
