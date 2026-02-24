@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: passos_magicos_api
+    container_name: datathon_grupo_179_api
     ports:
       - "8000:8000"
     volumes:
@@ -23,8 +23,8 @@ services:
       retries: 3
       start_period: 40s
     networks:
-      - passos_magicos_network
+      - datathon_grupo_179_network
 
 networks:
-  passos_magicos_network:
+  datathon_grupo_179_network:
     driver: bridge

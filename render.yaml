@@ -3,7 +3,7 @@
 
 services:
   - type: web
-    name: passos-magicos
+    name: datathon-grupo-179
     runtime: docker
     dockerfilePath: ./Dockerfile
     repo: https://github.com/valdrei/datathon-fase5-grupo-179
