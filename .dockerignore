@@ -1,0 +1,42 @@
+# Git
+.git/
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info
+venv/
+env/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Notebooks (não necessários em produção)
+notebooks/
+.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.yml
+.dockerignore
+
+# Testes e docs (não necessários em produção)
+tests/
+test_api_local.py
+README.md
+setup.ps1
+render.yaml
+exemplo_aluno.json
+exportar_excel.py
+
+# Logs locais (serão criados no container)
+logs/
+*.log
