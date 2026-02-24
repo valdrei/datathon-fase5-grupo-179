@@ -76,8 +76,8 @@ async def load_models():
         else:
             logger.warning(f"⚠️ Feature Engineer não encontrado: {feature_engineer_path}")
         
-        # Inicializar logger de predições
-        prediction_logger = PredictionLogger(log_dir="logs")
+        # Inicializar logger de predições (mantém últimos 10.000 registros)
+        prediction_logger = PredictionLogger(log_dir="logs", max_records=10000)
         logger.info("✅ Prediction Logger inicializado")
         
         # Inicializar detector de drift

@@ -20,18 +20,22 @@ logger = logging.getLogger(__name__)
 class PredictionLogger:
     """Classe para registrar predições e métricas."""
     
-    def __init__(self, log_dir: str = "../logs"):
+    def __init__(self, log_dir: str = "../logs", max_records: int = 10000):
         """
         Inicializa o logger de predições.
         
         Args:
             log_dir: Diretório onde salvar os logs
+            max_records: Número máximo de registros a manter (0 = sem limite)
         """
         self.log_dir = Path(log_dir)
         self.log_dir.mkdir(parents=True, exist_ok=True)
         
         self.predictions_file = self.log_dir / "predictions.jsonl"
         self.metrics_file = self.log_dir / "metrics.json"
+        self.max_records = max_records
+        self._write_count = 0
+        self._truncate_interval = 100  # verifica a cada N escritas
         
     def log_prediction(self, input_data: Dict, prediction: float, 
                       confidence: float, risk: str) -> None:
@@ -62,7 +66,38 @@ class PredictionLogger:
         with open(self.predictions_file, 'a') as f:
             f.write(json.dumps(log_entry) + '\n')
         
+        # Verificar e aplicar retenção periodicamente
+        self._write_count += 1
+        if self.max_records > 0 and self._write_count >= self._truncate_interval:
+            self._write_count = 0
+            self._enforce_retention()
+        
         logger.info(f"Predição registrada: {prediction:.2f} (risco: {risk})")
+    
+    def _enforce_retention(self) -> None:
+        """
+        Mantém apenas os últimos max_records registros no arquivo.
+        Remove os mais antigos quando o limite é ultrapassado.
+        """
+        if not self.predictions_file.exists():
+            return
+        
+        with open(self.predictions_file, 'r') as f:
+            lines = f.readlines()
+        
+        if len(lines) <= self.max_records:
+            return
+        
+        # Manter apenas os mais recentes
+        keep_lines = lines[-self.max_records:]
+        with open(self.predictions_file, 'w') as f:
+            f.writelines(keep_lines)
+        
+        removed = len(lines) - self.max_records
+        logger.info(
+            f"Retenção aplicada: {removed} registros antigos removidos, "
+            f"{self.max_records} mantidos"
+        )
     
     def get_prediction_statistics(self, last_n: Optional[int] = None) -> Dict[str, Any]:
         """

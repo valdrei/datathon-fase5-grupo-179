@@ -233,6 +233,50 @@ class TestPredictionLogger:
         assert "timestamp" in saved
         assert saved["metrics"]["r2"] == 0.85
 
+    def test_retention_removes_old_records(self, tmp_path):
+        """Ao ultrapassar max_records, mantém apenas os mais recentes."""
+        logger = PredictionLogger(
+            log_dir=str(tmp_path / "retention_logs"),
+            max_records=5,
+        )
+        # Forçar verificação a cada escrita
+        logger._truncate_interval = 1
+
+        for i in range(10):
+            logger.log_prediction(
+                input_data={"INDE 22": float(i)},
+                prediction=float(i),
+                confidence=0.9,
+                risk="Baixo",
+            )
+
+        with open(logger.predictions_file) as f:
+            lines = f.readlines()
+        assert len(lines) == 5
+        # Verifica que manteve os mais recentes (5..9)
+        first_kept = json.loads(lines[0])
+        assert first_kept["prediction"] == 5.0
+
+    def test_retention_disabled_when_zero(self, tmp_path):
+        """max_records=0 desativa a retenção (sem limite)."""
+        logger = PredictionLogger(
+            log_dir=str(tmp_path / "no_limit_logs"),
+            max_records=0,
+        )
+        logger._truncate_interval = 1
+
+        for i in range(20):
+            logger.log_prediction(
+                input_data={"INDE 22": float(i)},
+                prediction=float(i),
+                confidence=0.9,
+                risk="Baixo",
+            )
+
+        with open(logger.predictions_file) as f:
+            lines = f.readlines()
+        assert len(lines) == 20
+
 
 # ═══════════════════════════════════════════════════════
 #  2. TESTES DA CLASSE DriftDetector
