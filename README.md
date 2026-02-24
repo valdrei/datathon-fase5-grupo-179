@@ -1,7 +1,8 @@
 # 🎓 Passos Mágicos - Predição de Defasagem Escolar
 
-[![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109.0-green.svg)](https://fastapi.tiangolo.com/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-Frontend-red.svg)](https://streamlit.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Projeto de Machine Learning Engineering desenvolvido para a **Associação Passos Mágicos** com o objetivo de prever o risco de defasagem escolar de estudantes, auxiliando na identificação precoce de alunos que necessitam de intervenções pedagógicas.
@@ -14,6 +15,7 @@ Projeto de Machine Learning Engineering desenvolvido para a **Associação Passo
 - [Instalação e Configuração](#-instalação-e-configuração)
 - [Pipeline de Machine Learning](#-pipeline-de-machine-learning)
 - [API e Deploy](#-api-e-deploy)
+- [Frontend Streamlit](#-frontend-streamlit)
 - [Testes](#-testes)
 - [Monitoramento](#-monitoramento)
 - [Exemplos de Uso](#-exemplos-de-uso)
@@ -34,9 +36,10 @@ Pipeline completa de Machine Learning com:
 - ✅ Engenharia de features avançada
 - ✅ Treinamento com busca de hiperparâmetros
 - ✅ API REST para predições em tempo real
+- ✅ Frontend interativo com Streamlit (predição individual, lote com cancelamento, dashboard, monitoramento)
 - ✅ Dockerização para deploy
-- ✅ Testes unitários (>80% cobertura)
-- ✅ Monitoramento contínuo e detecção de drift
+- ✅ Testes unitários e de integração (>80% cobertura)
+- ✅ Monitoramento contínuo com detecção de drift (KS + PSI) via API e Streamlit
 
 ### Problema de Negócio
 
@@ -51,7 +54,7 @@ A **defasagem escolar** é calculada como a diferença entre a **fase atual** do
 ## 🛠 Stack Tecnológica
 
 ### Core
-- **Linguagem:** Python 3.11
+- **Linguagem:** Python 3.12
 - **Framework ML:** scikit-learn 1.3.2
 - **Data Processing:** pandas 2.1.4, numpy 1.26.3
 
@@ -61,6 +64,11 @@ A **defasagem escolar** é calculada como a diferença entre a **fase atual** do
 - **Serialização:** joblib 1.3.2
 - **Containerização:** Docker & Docker Compose
 
+### Frontend
+- **Interface:** Streamlit
+- **Gráficos Interativos:** Plotly
+- **Comunicação API:** requests / httpx
+
 ### Testes e Qualidade
 - **Framework de Testes:** pytest 7.4.4
 - **Cobertura:** pytest-cov 4.1.0
@@ -68,8 +76,8 @@ A **defasagem escolar** é calculada como a diferença entre a **fase atual** do
 
 ### Monitoramento
 - **Logging:** Python logging + custom PredictionLogger
-- **Drift Detection:** Kolmogorov-Smirnov test, PSI (Population Stability Index)
-- **Visualização:** matplotlib 3.8.2, seaborn 0.13.1
+- **Drift Detection:** Kolmogorov-Smirnov test (scipy), PSI (Population Stability Index)
+- **Visualização:** Plotly (frontend), matplotlib 3.8.2, seaborn 0.13.1
 
 ---
 
@@ -78,45 +86,56 @@ A **defasagem escolar** é calculada como a diferença entre a **fase atual** do
 ```
 Fase 5/
 │
-├── src/                                # Código-fonte principal
+├── app/                                # Aplicação FastAPI
+│   ├── __init__.py                     # Inicialização do pacote
+│   ├── main.py                         # Ponto de entrada da API (startup, carregamento de modelo)
+│   ├── routes.py                       # Endpoints REST (predição, monitoramento)
+│   └── model/                          # Artefatos do modelo treinado (*.pkl, *.csv, *.json)
+│
+├── frontend/                           # Interface Streamlit
+│   └── app_streamlit.py                # Dashboard interativo (predição, lote, monitoramento)
+│
+├── src/                                # Código-fonte do pipeline ML
 │   ├── __init__.py                     # Inicialização do pacote
 │   ├── preprocessing.py                # Pré-processamento de dados
 │   ├── feature_engineering.py          # Engenharia de features
 │   ├── train.py                        # Pipeline de treinamento
-│   ├── evaluation.py                   # Avaliação de modelos
-│   ├── api.py                          # API FastAPI
-│   └── monitoring.py                   # Monitoramento e drift detection
+│   ├── evaluate.py                     # Avaliação de modelos
+│   ├── monitoring.py                   # Monitoramento e drift detection
+│   └── utils.py                        # Funções utilitárias
 │
-├── tests/                              # Testes unitários
-│   ├── conftest.py                     # Configuração do pytest
-│   ├── test_preprocessing.py           # Testes de pré-processamento
-│   └── test_api.py                     # Testes da API
+├── tests/                              # Testes unitários e de integração
+│   ├── conftest.py                     # Configuração e fixtures do pytest
+│   ├── test_api.py                     # Testes dos endpoints da API
+│   ├── test_frontend.py                # Testes de integração frontend ↔ API
+│   ├── test_model.py                   # Testes do modelo e pipeline de treino
+│   ├── test_monitoring.py              # Testes de monitoramento e drift detection
+│   └── test_preprocessing.py           # Testes de pré-processamento
 │
-├── models/                             # Modelos treinados (*.pkl)
-│   ├── model_random_forest_latest.pkl
-│   ├── preprocessor_latest.pkl
-│   └── feature_engineer_latest.pkl
+├── notebooks/                          # Notebooks exploratórios
+│   ├── 01_EDA_Analise_Exploratoria.ipynb
+│   └── 02_Qualidade_Dados.ipynb
 │
-├── logs/                               # Logs e monitoramento
-│   ├── api.log                         # Logs da API
-│   ├── predictions.jsonl               # Log de predições
-│   └── dashboard.html                  # Dashboard de monitoramento
+├── data/                               # Datasets PEDE (2022-2024)
+│   ├── PEDE2022.csv / PEDE2022_clean.csv
+│   ├── PEDE2023.csv / PEDE2023_clean.csv
+│   └── PEDE2024.csv / PEDE2024_clean.csv
 │
 ├── config/                             # Configurações
 │   └── config.yaml                     # Configurações do projeto
 │
-├── data/                               # Datasets
-│   └── reference_data.csv              # Dados de referência para drift
-│
-├── notebooks/                          # Notebooks exploratórios (opcional)
-│
-├── docker/                             # Arquivos Docker
+├── logs/                               # Logs e monitoramento
+│   └── predictions.jsonl               # Log de predições (JSONL)
 │
 ├── Dockerfile                          # Dockerfile da aplicação
 ├── docker-compose.yml                  # Docker Compose
-├── .dockerignore                       # Arquivos ignorados no Docker
+├── render.yaml                         # Configuração de deploy (Render)
 ├── requirements.txt                    # Dependências Python
-├── .gitignore                          # Arquivos ignorados pelo Git
+├── setup.ps1                           # Script de setup (Windows)
+├── start.sh                            # Script de inicialização (Linux)
+├── exportar_excel.py                   # Utilitário para exportar dados Excel → CSV
+├── exemplo_aluno.json                  # Exemplo de payload para predição
+├── test_api_local.py                   # Testes manuais da API
 └── README.md                           # Esta documentação
 ```
 
@@ -126,17 +145,18 @@ Fase 5/
 
 ### Pré-requisitos
 
-- Python 3.11+
+- Python 3.12+
 - pip ou conda
 - Docker (opcional, para containerização)
 - Git
 
 ### Instalação Local
 
-#### 1. Clone o repositório (ou navegue até a pasta do projeto)
+#### 1. Clone o repositório
 
 ```bash
-cd "c:\Users\Drei\OneDrive\Documentos\Pós_FIAP\Fase 5"
+git clone https://github.com/valdrei/datathon-fase5-grupo-179.git
+cd datathon-fase5-grupo-179
 ```
 
 #### 2. Crie e ative um ambiente virtual
@@ -298,6 +318,10 @@ X, y = preprocessor.preprocess_pipeline(df, fit=True)
 
 ## 🌐 API e Deploy
 
+> ⚠️ **Importante:** Certifique-se de que o ambiente virtual está ativo antes de executar qualquer comando abaixo.
+> - **Windows:** `.\venv\Scripts\Activate.ps1`
+> - **Linux/Mac:** `source venv/bin/activate`
+
 ### Executar API Localmente
 
 ```powershell
@@ -309,6 +333,24 @@ python -m app.main
 ```
 
 A API estará disponível em: **http://localhost:8000**
+
+### Executar Frontend Streamlit
+
+```powershell
+streamlit run frontend/app_streamlit.py
+```
+
+O frontend estará disponível em: **http://localhost:8501**
+
+**Páginas disponíveis:**
+
+| Página | Descrição |
+|---|---|
+| 🔮 Predição Individual | Formulário interativo para prever defasagem de um aluno |
+| 📊 Predição em Lote (CSV) | Upload de CSV para predições em massa, com botão de cancelamento |
+| 📈 Dashboard do Modelo | Informações do modelo, feature importance, métricas |
+| 🛡️ Monitoramento | Estatísticas em tempo real, distribuição de risco, detecção de drift |
+| ℹ️ Sobre | Informações sobre o projeto e a Associação Passos Mágicos |
 
 ### Documentação Interativa
 
@@ -332,7 +374,10 @@ curl http://localhost:8000/
   "endpoints": {
     "/predict": "POST - Fazer predição de defasagem",
     "/health": "GET - Verificar saúde da API",
-    "/model-info": "GET - Informações sobre o modelo"
+    "/model-info": "GET - Informações sobre o modelo",
+    "/monitoring/stats": "GET - Estatísticas de predições",
+    "/monitoring/predictions": "GET - Histórico de predições",
+    "/monitoring/drift": "GET - Relatório de drift"
   }
 }
 ```
@@ -458,6 +503,77 @@ print(f"Recomendação: {result['recomendacao']}")
 3. Headers: `Content-Type: application/json`
 4. Body (raw JSON): Copiar exemplo acima
 
+#### 5. **GET /monitoring/stats** - Estatísticas de Predições
+```bash
+curl http://localhost:8000/monitoring/stats
+# Com parâmetro opcional: ?last_n=50
+```
+
+**Response:**
+```json
+{
+  "total_predictions": 150,
+  "mean_prediction": -0.85,
+  "std_prediction": 1.23,
+  "min_prediction": -3.5,
+  "max_prediction": 2.1,
+  "risk_distribution": {
+    "Baixo": 45,
+    "Moderado": 60,
+    "Alto": 30,
+    "Crítico": 15
+  }
+}
+```
+
+#### 6. **GET /monitoring/predictions** - Histórico de Predições
+```bash
+curl http://localhost:8000/monitoring/predictions?last_n=10
+```
+
+**Response:**
+```json
+{
+  "total": 10,
+  "predictions": [
+    {
+      "timestamp": "2026-02-11T19:30:00",
+      "prediction": -1.2,
+      "risk": "Alto",
+      "confidence": 0.87
+    }
+  ]
+}
+```
+
+#### 7. **GET /monitoring/drift** - Relatório de Drift
+```bash
+curl http://localhost:8000/monitoring/drift
+```
+
+**Response:**
+```json
+{
+  "total_predictions": 150,
+  "prediction_drift": {
+    "first_half_mean": -0.92,
+    "second_half_mean": -0.78,
+    "ks_statistic": 0.12,
+    "ks_pvalue": 0.34,
+    "drift_detected": false
+  },
+  "psi": {
+    "value": 0.08,
+    "status": "Estável",
+    "thresholds": {
+      "stable": "< 0.1",
+      "moderate_change": "0.1 - 0.25",
+      "significant_change": "> 0.25"
+    }
+  }
+}
+```
+
 ### Deploy com Docker
 
 #### Construir a imagem
@@ -548,6 +664,54 @@ gcloud run deploy passos-magicos-api \
 
 ---
 
+## 🖥 Frontend Streamlit
+
+O frontend é uma aplicação **Streamlit** que consome a API FastAPI e oferece uma interface visual completa para interagir com o modelo.
+
+### Como Executar
+
+```powershell
+# Terminal 1 — API
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+# Terminal 2 — Frontend
+streamlit run frontend/app_streamlit.py
+```
+
+### Páginas
+
+#### 🔮 Predição Individual
+Formulário interativo com todos os campos do aluno. Após submissão, exibe:
+- Gauge de defasagem prevista
+- Classificação de risco com cor
+- Confiança do modelo
+- Recomendação pedagógica personalizada
+- Radar chart dos indicadores do aluno
+
+#### 📊 Predição em Lote (CSV)
+- Upload de arquivo CSV com múltiplos alunos
+- Processamento linha a linha com barra de progresso
+- **Botão de cancelamento** para interromper o processamento a qualquer momento
+- Download dos resultados em CSV
+
+#### 📈 Dashboard do Modelo
+- Informações do modelo carregado
+- Feature importance (gráfico de barras)
+- Métricas de avaliação
+
+#### 🛡️ Monitoramento
+- Métricas em tempo real (total de predições, média, desvio padrão)
+- Gráfico de pizza da distribuição de risco
+- Timeline temporal das predições com área de desvio
+- Detecção de drift via histograma comparativo (1ª vs 2ª metade)
+- Resultado do teste KS e indicador PSI
+- Cache de 60 segundos para performance
+
+#### ℹ️ Sobre
+Informações sobre o projeto e a Associação Passos Mágicos.
+
+---
+
 ## 🧪 Testes
 
 ### Executar Todos os Testes
@@ -580,6 +744,12 @@ pytest tests/test_preprocessing.py -v
 # Apenas testes de API
 pytest tests/test_api.py -v
 
+# Apenas testes de frontend
+pytest tests/test_frontend.py -v
+
+# Apenas testes de monitoramento
+pytest tests/test_monitoring.py -v
+
 # Teste específico
 pytest tests/test_preprocessing.py::TestDataPreprocessor::test_clean_data -v
 ```
@@ -593,10 +763,29 @@ pytest tests/test_preprocessing.py::TestDataPreprocessor::test_clean_data -v
 - Testes de pipeline completo
 
 **tests/test_api.py:**
-- Testes de endpoints
+- Testes de endpoints (root, health, model-info, predict)
 - Testes de validação de dados
 - Testes de classificação de risco
 - Testes de geração de recomendações
+
+**tests/test_frontend.py:**
+- Validação de payloads (defaults, campos obrigatórios, limites)
+- Testes de integração frontend ↔ API
+- Navegação entre páginas do Streamlit
+- Funcionalidade de cancelamento de lote
+- Endpoints de monitoramento via cliente frontend
+
+**tests/test_monitoring.py:**
+- PredictionLogger (logging, estatísticas, métricas)
+- DriftDetector (KS test, PSI, distribuições)
+- ModelMonitor (degradação de modelo)
+- Endpoints de monitoramento (/monitoring/stats, /predictions, /drift)
+- Cenários com dados vazios
+
+**tests/test_model.py:**
+- Treinamento e persistência do modelo
+- Validação cruzada
+- Limites de predição
 
 **Cobertura Esperada:** >80%
 
@@ -604,13 +793,15 @@ pytest tests/test_preprocessing.py::TestDataPreprocessor::test_clean_data -v
 
 ## 📊 Monitoramento
 
+O projeto possui monitoramento contínuo acessível via **3 endpoints da API** e uma **página dedicada no Streamlit**.
+
 ### Logging de Predições
 
 Todas as predições são automaticamente registradas em `logs/predictions.jsonl`:
 
 ```json
 {
-  "timestamp": "2024-01-29T10:30:00",
+  "timestamp": "2026-02-11T19:30:00",
   "prediction": -1.2,
   "confidence": 0.87,
   "risk": "Alto",
@@ -628,49 +819,49 @@ Todas as predições são automaticamente registradas em `logs/predictions.jsonl
 
 O sistema detecta automaticamente drift em duas dimensões:
 
-1. **Kolmogorov-Smirnov Test**: Compara distribuições de features
+1. **Kolmogorov-Smirnov Test**: Compara distribuições de predições (1ª metade vs 2ª metade)
 2. **Population Stability Index (PSI)**: Monitora mudanças nas distribuições
 
 **Thresholds:**
 - KS test: p-value < 0.05 → Drift detectado
-- PSI: >0.25 → Mudança significativa
+- PSI < 0.1 → Estável | 0.1–0.25 → Mudança moderada | >0.25 → Mudança significativa
 
-### Dashboard de Monitoramento
+### Dashboard no Streamlit (Monitoramento)
 
-Gerar dashboard HTML:
+A página **🛡️ Monitoramento** no frontend exibe em tempo real:
 
-```python
-from src.monitoring import create_monitoring_dashboard
+- **Métricas Resumidas:** total de predições, defasagem média, desvio padrão, mín/máx
+- **Distribuição de Risco:** gráfico de pizza com categorias Baixo/Moderado/Alto/Crítico
+- **Timeline de Predições:** gráfico temporal com linha de média e área de desvio
+- **Detecção de Drift:** histograma comparativo (1ª vs 2ª metade) com resultado do KS test
+- **PSI:** indicador de estabilidade da distribuição de predições
 
-create_monitoring_dashboard(
-    log_dir='./logs',
-    output_file='./logs/dashboard.html'
-)
-```
+Os dados são atualizados automaticamente a cada 60 segundos (cache TTL).
 
-Abrir dashboard:
-```powershell
-start logs/dashboard.html
-```
+### Endpoints de Monitoramento
 
-**Dashboard inclui:**
-- Total de predições
-- Defasagem média
-- Confiança média
-- Distribuição de riscos
-- Estatísticas temporais
+| Endpoint | Método | Descrição |
+|---|---|---|
+| `/monitoring/stats` | GET | Estatísticas agregadas de predições |
+| `/monitoring/predictions` | GET | Histórico de predições (parâmetro `last_n`) |
+| `/monitoring/drift` | GET | Relatório de drift com KS test e PSI |
 
-### Estatísticas de Predições
+### Uso Programático
 
 ```python
-from src.monitoring import PredictionLogger
+from src.monitoring import PredictionLogger, DriftDetector
 
+# Estatísticas
 logger = PredictionLogger(log_dir='./logs')
 stats = logger.get_prediction_statistics(last_n=100)
-
 print(f"Total de predições: {stats['total_predictions']}")
 print(f"Defasagem média: {stats['mean_prediction']:.2f}")
 print(f"Distribuição de risco: {stats['risk_distribution']}")
+
+# Drift detection
+detector = DriftDetector(reference_file='data/reference_data.csv')
+drift = detector.detect_drift(new_data)
+psi = detector.monitor_psi(new_data)
 ```
 
 ---
@@ -850,15 +1041,22 @@ Para dúvidas, sugestões ou problemas:
 
 ## 🔄 Próximos Passos
 
+**Concluídos recentemente:**
+- [x] Dashboard interativo com Streamlit (5 páginas)
+- [x] Monitoramento contínuo com detecção de drift (KS + PSI)
+- [x] Endpoints REST de monitoramento
+- [x] Predição em lote via CSV com cancelamento
+- [x] Testes de monitoramento e integração frontend (122+ testes)
+
+**Pendentes:**
 - [ ] Implementar ensemble de modelos
 - [ ] Adicionar explicabilidade (SHAP values)
-- [ ] Dashboard interativo com Streamlit
 - [ ] CI/CD com GitHub Actions
 - [ ] Retreinamento automático
 - [ ] A/B Testing de modelos
 
 ---
 
-**Última atualização:** Janeiro 2024
+**Última atualização:** Fevereiro 2026
 
 **Status do Projeto:** ✅ Completo e Pronto para Produção
