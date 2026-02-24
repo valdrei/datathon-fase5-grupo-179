@@ -20,18 +20,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy requirements first for better caching
 COPY requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install only production dependencies (skip Jupyter/Notebook)
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip uninstall -y jupyter ipykernel notebook missingno 2>/dev/null || true
 
 # Copy application code
 COPY app/ ./app/
 COPY src/ ./src/
 COPY config/ ./config/
 COPY frontend/ ./frontend/
+COPY data/ ./data/
 COPY start.sh .
 
 # Create necessary directories
-RUN mkdir -p /app/logs /app/app/model /app/data \
+RUN mkdir -p /app/logs /app/app/model \
     && chmod +x start.sh
 
 # Expose ports (FastAPI=8000, Streamlit=PORT from Render)

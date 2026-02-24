@@ -6,7 +6,7 @@ services:
     name: passos-magicos
     runtime: docker
     dockerfilePath: ./Dockerfile
-    repo: # preencher com URL do repositório GitHub
+    repo: https://github.com/valdrei/datathon-fase5-grupo-179
     branch: main
     plan: free
     envVars:
@@ -14,7 +14,7 @@ services:
         value: http://localhost:8000
       - key: PORT
         value: "10000"
-    healthCheckPath: /health
+    healthCheckPath: /
     buildFilter:
       paths:
         - app/**
