@@ -10,13 +10,17 @@ import plotly.express as px
 import plotly.graph_objects as go
 import json
 import os
+from pathlib import Path
+
+# Caminho do ícone local
+ICON_PATH = Path(__file__).parent / "assets" / "icon-passos-magicos.jpeg"
 
 # ─────────────────────── CONFIG ───────────────────────
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 
 st.set_page_config(
     page_title="Passos Mágicos – Predição de Defasagem",
-    page_icon="🔮",
+    page_icon=str(ICON_PATH) if ICON_PATH.exists() else "🔮",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -111,12 +115,15 @@ def risk_emoji(risk: str) -> str:
 
 # ─────────────────────── SIDEBAR ───────────────────────
 with st.sidebar:
-    st.image("https://passosmagicos.org.br/wp-content/uploads/2023/04/logo-passos-magicos.png", width=220)
+    if ICON_PATH.exists():
+        st.image(str(ICON_PATH), width=220)
+    else:
+        st.markdown("### 🎓 Passos Mágicos")
     st.markdown("---")
 
     page = st.radio(
         "Navegação",
-        ["🔮 Predição Individual", "📊 Predição em Lote (CSV)", "📈 Dashboard do Modelo", "ℹ️ Sobre"],
+        ["🔮 Predição Individual", "📊 Predição em Lote (CSV)", "📈 Dashboard do Modelo", "🛡️ Monitoramento", "ℹ️ Sobre"],
         index=0,
     )
 
@@ -186,7 +193,7 @@ if page == "🔮 Predição Individual":
 
         c3, c4, c5 = st.columns(3)
         fase = c3.number_input("Fase Atual", 0, 10, 2)
-        idade = c4.number_input("Idade (em 2022)", 5, 25, 12)
+        idade = c4.number_input("Idade do Aluno", 5, 25, 12)
         fase_ideal = c5.selectbox("Fase Ideal", fases_ideais, index=1)
 
         c6, c7 = st.columns(2)
@@ -317,26 +324,74 @@ elif page == "📊 Predição em Lote (CSV)":
 
     uploaded = st.file_uploader("Upload CSV (mesmo formato do PEDE2022)", type=["csv"])
 
+    # Inicializar estado do processamento em lote
+    if "batch_running" not in st.session_state:
+        st.session_state.batch_running = False
+    if "batch_cancelled" not in st.session_state:
+        st.session_state.batch_cancelled = False
+    if "batch_results" not in st.session_state:
+        st.session_state.batch_results = None
+
     if uploaded:
         df = pd.read_csv(uploaded)
         st.write(f"**{len(df)} alunos carregados**")
         st.dataframe(df.head(), use_container_width=True)
 
-        if st.button("🚀 Processar Predições", type="primary", use_container_width=True):
+        # Botões de ação
+        btn_col1, btn_col2 = st.columns([3, 1])
+        with btn_col1:
+            start_btn = st.button(
+                "🚀 Processar Predições",
+                type="primary",
+                use_container_width=True,
+                disabled=st.session_state.batch_running,
+            )
+        with btn_col2:
+            cancel_btn = st.button(
+                "🛑 Cancelar",
+                use_container_width=True,
+                disabled=not st.session_state.batch_running,
+                type="secondary",
+            )
+
+        if cancel_btn:
+            st.session_state.batch_cancelled = True
+            st.session_state.batch_running = False
+
+        if start_btn:
+            st.session_state.batch_running = True
+            st.session_state.batch_cancelled = False
+            st.session_state.batch_results = None
             results = []
             progress = st.progress(0, text="Processando...")
+            status_text = st.empty()
 
             for i, row in df.iterrows():
+                # Verificar cancelamento
+                if st.session_state.batch_cancelled:
+                    status_text.warning(
+                        f"⚠️ Processamento cancelado pelo usuário "
+                        f"após {len(results)}/{len(df)} predições."
+                    )
+                    break
+
                 payload = row.to_dict()
-                # Converter NaN para None
-                payload = {k: (None if pd.isna(v) else v) for k, v in payload.items()}
+                payload = {
+                    k: (None if pd.isna(v) else v)
+                    for k, v in payload.items()
+                }
 
                 try:
-                    r = requests.post(f"{API_URL}/predict", json=payload, timeout=30)
+                    r = requests.post(
+                        f"{API_URL}/predict",
+                        json=payload, timeout=30,
+                    )
                     if r.status_code == 200:
                         pred = r.json()
                         results.append({
-                            "Aluno": payload.get("Nome", f"Aluno {i+1}"),
+                            "Aluno": payload.get(
+                                "Nome", f"Aluno {i+1}"
+                            ),
                             "Defasagem": pred["defasagem_prevista"],
                             "Risco": pred["risco"],
                             "Confiança": pred["confianca"],
@@ -344,21 +399,44 @@ elif page == "📊 Predição em Lote (CSV)":
                         })
                     else:
                         results.append({
-                            "Aluno": payload.get("Nome", f"Aluno {i+1}"),
-                            "Defasagem": None, "Risco": "Erro",
-                            "Confiança": None, "Recomendação": f"Erro: {r.status_code}",
+                            "Aluno": payload.get(
+                                "Nome", f"Aluno {i+1}"
+                            ),
+                            "Defasagem": None,
+                            "Risco": "Erro",
+                            "Confiança": None,
+                            "Recomendação": f"Erro: {r.status_code}",
                         })
                 except Exception as e:
                     results.append({
-                        "Aluno": payload.get("Nome", f"Aluno {i+1}"),
-                        "Defasagem": None, "Risco": "Erro",
-                        "Confiança": None, "Recomendação": str(e),
+                        "Aluno": payload.get(
+                            "Nome", f"Aluno {i+1}"
+                        ),
+                        "Defasagem": None,
+                        "Risco": "Erro",
+                        "Confiança": None,
+                        "Recomendação": str(e),
                     })
 
-                progress.progress((i + 1) / len(df), text=f"Processando {i+1}/{len(df)}...")
+                progress.progress(
+                    (i + 1) / len(df),
+                    text=f"Processando {i+1}/{len(df)}...",
+                )
 
             progress.empty()
-            df_results = pd.DataFrame(results)
+            st.session_state.batch_running = False
+            st.session_state.batch_results = results
+
+            if not st.session_state.batch_cancelled and results:
+                status_text.success(
+                    f"✅ {len(results)} predições concluídas!"
+                )
+
+        # Exibir resultados (persistem após rerun)
+        if st.session_state.batch_results:
+            df_results = pd.DataFrame(
+                st.session_state.batch_results
+            )
 
             st.subheader("📋 Resultados")
             st.dataframe(df_results, use_container_width=True)
@@ -370,15 +448,25 @@ elif page == "📊 Predição em Lote (CSV)":
                     title="Distribuição de Risco",
                     color="Risco",
                     color_discrete_map={
-                        "Baixo": "#38ef7d", "Moderado": "#F2C94C",
-                        "Alto": "#f45c43", "Crítico": "#6f0000", "Erro": "#999",
+                        "Baixo": "#38ef7d",
+                        "Moderado": "#F2C94C",
+                        "Alto": "#f45c43",
+                        "Crítico": "#6f0000",
+                        "Erro": "#999",
                     },
                 )
                 st.plotly_chart(fig_risk, use_container_width=True)
 
             # Download
-            csv_out = df_results.to_csv(index=False).encode("utf-8")
-            st.download_button("⬇️ Download Resultados (CSV)", csv_out, "predicoes_passos_magicos.csv", "text/csv")
+            csv_out = df_results.to_csv(
+                index=False
+            ).encode("utf-8")
+            st.download_button(
+                "⬇️ Download Resultados (CSV)",
+                csv_out,
+                "predicoes_passos_magicos.csv",
+                "text/csv",
+            )
 
 
 # ═══════════════════════════════════════════════════════
@@ -432,7 +520,209 @@ elif page == "📈 Dashboard do Modelo":
 
 
 # ═══════════════════════════════════════════════════════
-#  PÁGINA 4 – SOBRE
+#  PÁGINA 4 – MONITORAMENTO CONTÍNUO
+# ═══════════════════════════════════════════════════════
+elif page == "🛡️ Monitoramento":
+    st.markdown('<p class="main-header">🛡️ Monitoramento Contínuo</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-header">Acompanhamento de predições, drift e saúde do modelo em produção</p>', unsafe_allow_html=True)
+
+    # ── Cache para não recarregar a cada interação ──
+    @st.cache_data(ttl=60)
+    def fetch_monitoring_stats():
+        try:
+            r = requests.get(f"{API_URL}/monitoring/stats", timeout=10)
+            return r.json() if r.status_code == 200 else None
+        except Exception:
+            return None
+
+    @st.cache_data(ttl=60)
+    def fetch_predictions_history(last_n=200):
+        try:
+            r = requests.get(f"{API_URL}/monitoring/predictions", params={"last_n": last_n}, timeout=10)
+            return r.json() if r.status_code == 200 else None
+        except Exception:
+            return None
+
+    @st.cache_data(ttl=60)
+    def fetch_drift_report():
+        try:
+            r = requests.get(f"{API_URL}/monitoring/drift", timeout=10)
+            return r.json() if r.status_code == 200 else None
+        except Exception:
+            return None
+
+    # Carregar dados
+    mon_stats = fetch_monitoring_stats()
+    mon_preds = fetch_predictions_history()
+    mon_drift = fetch_drift_report()
+
+    if mon_stats and mon_stats.get("total_predictions", 0) > 0:
+        # ── Métricas resumo ──
+        st.subheader("📊 Resumo das Predições")
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Total Predições", mon_stats["total_predictions"])
+        k2.metric("Defasagem Média", f"{mon_stats['mean_prediction']:.2f}")
+        k3.metric("Desvio Padrão", f"{mon_stats['std_prediction']:.2f}")
+        k4.metric("Confiança Média", f"{mon_stats['mean_confidence']:.0%}")
+
+        k5, k6 = st.columns(2)
+        k5.metric("Mín. Defasagem", f"{mon_stats['min_prediction']:.2f}")
+        k6.metric("Máx. Defasagem", f"{mon_stats['max_prediction']:.2f}")
+
+        st.caption(f"Última predição: {mon_stats.get('last_prediction_time', 'N/A')}")
+
+        st.markdown("---")
+
+        # ── Distribuição de risco (pizza) ──
+        st.subheader("🎯 Distribuição de Risco")
+        risk_dist = mon_stats.get("risk_distribution", {})
+        if risk_dist:
+            fig_risk_pie = px.pie(
+                values=list(risk_dist.values()),
+                names=list(risk_dist.keys()),
+                title="Distribuição dos Níveis de Risco",
+                color=list(risk_dist.keys()),
+                color_discrete_map={
+                    "Baixo": "#38ef7d", "Moderado": "#F2C94C",
+                    "Alto": "#f45c43", "Crítico": "#6f0000",
+                },
+                hole=0.4,
+            )
+            fig_risk_pie.update_layout(height=400)
+            st.plotly_chart(fig_risk_pie, use_container_width=True)
+
+        st.markdown("---")
+
+        # ── Evolução temporal das predições ──
+        if mon_preds and mon_preds.get("predictions"):
+            st.subheader("📈 Evolução Temporal das Predições")
+            df_preds = pd.DataFrame(mon_preds["predictions"])
+            df_preds["timestamp"] = pd.to_datetime(df_preds["timestamp"])
+            df_preds = df_preds.sort_values("timestamp")
+
+            # Linha temporal de defasagem
+            fig_timeline = px.line(
+                df_preds, x="timestamp", y="prediction",
+                title="Defasagem Prevista ao Longo do Tempo",
+                labels={"timestamp": "Data/Hora", "prediction": "Defasagem"},
+                markers=True,
+            )
+            fig_timeline.add_hline(y=0, line_dash="dash", line_color="green",
+                                   annotation_text="Sem defasagem")
+            fig_timeline.add_hline(y=-1, line_dash="dash", line_color="orange",
+                                   annotation_text="Risco Moderado")
+            fig_timeline.add_hline(y=-2, line_dash="dash", line_color="red",
+                                   annotation_text="Risco Alto")
+            fig_timeline.update_layout(height=400)
+            st.plotly_chart(fig_timeline, use_container_width=True)
+
+            # Confiança ao longo do tempo
+            fig_conf = px.area(
+                df_preds, x="timestamp", y="confidence",
+                title="Confiança do Modelo ao Longo do Tempo",
+                labels={"timestamp": "Data/Hora", "confidence": "Confiança"},
+            )
+            fig_conf.update_layout(height=300, yaxis_range=[0, 1])
+            fig_conf.update_traces(fill="tozeroy", fillcolor="rgba(102, 126, 234, 0.2)",
+                                   line_color="#667eea")
+            st.plotly_chart(fig_conf, use_container_width=True)
+
+            # Histograma de distribuição de defasagem
+            fig_hist = px.histogram(
+                df_preds, x="prediction", nbins=20,
+                title="Distribuição das Predições de Defasagem",
+                labels={"prediction": "Defasagem Prevista", "count": "Frequência"},
+                color_discrete_sequence=["#667eea"],
+            )
+            fig_hist.update_layout(height=350)
+            st.plotly_chart(fig_hist, use_container_width=True)
+
+        st.markdown("---")
+
+        # ── Drift Detection ──
+        st.subheader("🔍 Detecção de Drift")
+        if mon_drift:
+            pred_drift = mon_drift.get("prediction_drift", {})
+            if pred_drift and pred_drift.get("total_predictions", 0) >= 10:
+                drift_detected = pred_drift.get("drift_detected", False)
+
+                if drift_detected:
+                    st.error("⚠️ **DRIFT DETECTADO** – A distribuição das predições mudou significativamente!")
+                else:
+                    st.success("✅ **Sem drift detectado** – As predições estão estáveis.")
+
+                d1, d2, d3 = st.columns(3)
+                d1.metric("Média (1ª metade)", f"{pred_drift['first_half_mean']:.4f}")
+                d2.metric("Média (2ª metade)", f"{pred_drift['second_half_mean']:.4f}")
+                d3.metric("Shift na Média", f"{pred_drift['mean_shift']:.4f}",
+                          delta=f"{pred_drift['mean_shift']:.4f}",
+                          delta_color="inverse")
+
+                d4, d5, d6 = st.columns(3)
+                d4.metric("Desvio (1ª metade)", f"{pred_drift['first_half_std']:.4f}")
+                d5.metric("Desvio (2ª metade)", f"{pred_drift['second_half_std']:.4f}")
+                if "ks_pvalue" in pred_drift:
+                    d6.metric("KS p-value", f"{pred_drift['ks_pvalue']:.4f}",
+                              help="p < 0.05 indica drift significativo")
+
+                # Gráfico comparativo das duas metades
+                if mon_preds and mon_preds.get("predictions"):
+                    preds_list = [p["prediction"] for p in mon_preds["predictions"]]
+                    mid = len(preds_list) // 2
+                    df_compare = pd.DataFrame({
+                        "Defasagem": preds_list[:mid] + preds_list[mid:],
+                        "Período": ["1ª Metade"] * mid + ["2ª Metade"] * (len(preds_list) - mid)
+                    })
+                    fig_drift_comp = px.histogram(
+                        df_compare, x="Defasagem", color="Período",
+                        barmode="overlay", nbins=15,
+                        title="Comparação de Distribuição – 1ª vs 2ª Metade",
+                        color_discrete_map={"1ª Metade": "#667eea", "2ª Metade": "#f45c43"},
+                        opacity=0.6,
+                    )
+                    fig_drift_comp.update_layout(height=350)
+                    st.plotly_chart(fig_drift_comp, use_container_width=True)
+            else:
+                st.info("📊 São necessárias pelo menos **10 predições** para análise de drift.")
+
+            # Status do drift detector
+            st.markdown("---")
+            st.subheader("⚙️ Configuração do Drift Detector")
+            st.markdown(f"""
+            | Parâmetro | Valor |
+            |-----------|-------|
+            | **Drift por PSI habilitado** | {'✅ Sim' if mon_drift.get('drift_enabled') else '❌ Não (dados de referência não configurados)'} |
+            | **Limiar PSI – Sem mudança** | {mon_drift.get('psi_thresholds', {}).get('no_change', '< 0.10')} |
+            | **Limiar PSI – Moderada** | {mon_drift.get('psi_thresholds', {}).get('moderate', '0.10 – 0.25')} |
+            | **Limiar PSI – Significativa** | {mon_drift.get('psi_thresholds', {}).get('significant', '> 0.25')} |
+            """)
+
+            if not mon_drift.get("drift_enabled"):
+                st.caption(
+                    "💡 Para habilitar drift por PSI, configure um arquivo CSV de referência "
+                    "(ex: PEDE2022_clean.csv) no DriftDetector."
+                )
+        else:
+            st.warning("Não foi possível conectar à API para obter dados de drift.")
+
+        # ── Botão para limpar cache ──
+        st.markdown("---")
+        if st.button("🔄 Atualizar Dados", use_container_width=True):
+            fetch_monitoring_stats.clear()
+            fetch_predictions_history.clear()
+            fetch_drift_report.clear()
+            st.rerun()
+
+    else:
+        st.info(
+            "📭 **Nenhuma predição registrada ainda.**\n\n"
+            "Faça predições na página **🔮 Predição Individual** ou **📊 Predição em Lote** "
+            "para começar a visualizar os dados de monitoramento."
+        )
+
+
+# ═══════════════════════════════════════════════════════
+#  PÁGINA 5 – SOBRE
 # ═══════════════════════════════════════════════════════
 elif page == "ℹ️ Sobre":
     st.markdown('<p class="main-header">ℹ️ Sobre o Projeto</p>', unsafe_allow_html=True)
