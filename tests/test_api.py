@@ -3,6 +3,7 @@ Testes unitários para API FastAPI.
 """
 
 import pytest
+import tempfile
 from fastapi.testclient import TestClient
 import sys
 from pathlib import Path
@@ -47,10 +48,17 @@ def client():
             return df
     
     class MockLogger:
+        def __init__(self):
+            self.predictions_file = Path(tempfile.mkdtemp()) / "predictions.jsonl"
+
         def log_prediction(self, **kwargs):
             pass
+
+        def get_prediction_statistics(self, last_n=None):
+            return {}
     
     class MockDriftDetector:
+        reference_data = None
         def detect_drift(self, df):
             return False
     

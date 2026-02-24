@@ -12,6 +12,7 @@ Nota: Usa TestClient do FastAPI (não precisa da API rodando).
 
 import pytest
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -84,10 +85,17 @@ def client():
             return df
 
     class MockLogger:
+        def __init__(self):
+            self.predictions_file = Path(tempfile.mkdtemp()) / "predictions.jsonl"
+
         def log_prediction(self, **kwargs):
             pass
 
+        def get_prediction_statistics(self, last_n=None):
+            return {}
+
     class MockDriftDetector:
+        reference_data = None
         def detect_drift(self, df):
             return False
 
@@ -368,3 +376,73 @@ class TestSincronizacaoChaves:
             assert key in schema_fields, (
                 f"Chave '{key}' nos DEFAULTS do frontend não existe no schema da API"
             )
+
+
+# ═════════════════════════════════════════════════════════════
+#  8. NAVEGAÇÃO DO FRONTEND (páginas disponíveis)
+# ═════════════════════════════════════════════════════════════
+class TestFrontendNavigation:
+    """Garante que o frontend tem todas as páginas esperadas."""
+
+    def test_frontend_source_has_monitoring_page(self):
+        """O código-fonte do frontend contém a página de monitoramento."""
+        frontend_path = Path(__file__).parent.parent / "frontend" / "app_streamlit.py"
+        source = frontend_path.read_text(encoding="utf-8")
+        assert "🛡️ Monitoramento" in source
+
+    def test_frontend_source_has_batch_cancel(self):
+        """O código-fonte do frontend contém botão de cancelar lote."""
+        frontend_path = Path(__file__).parent.parent / "frontend" / "app_streamlit.py"
+        source = frontend_path.read_text(encoding="utf-8")
+        assert "batch_cancelled" in source
+        assert "🛑 Cancelar" in source
+
+    def test_frontend_monitoring_calls_api(self):
+        """Frontend chama endpoints de monitoramento."""
+        frontend_path = Path(__file__).parent.parent / "frontend" / "app_streamlit.py"
+        source = frontend_path.read_text(encoding="utf-8")
+        assert "/monitoring/stats" in source
+        assert "/monitoring/predictions" in source
+        assert "/monitoring/drift" in source
+
+    def test_frontend_has_all_pages(self):
+        """Frontend declara as 5 páginas no radio."""
+        frontend_path = Path(__file__).parent.parent / "frontend" / "app_streamlit.py"
+        source = frontend_path.read_text(encoding="utf-8")
+        pages = [
+            "🔮 Predição Individual",
+            "📊 Predição em Lote (CSV)",
+            "📈 Dashboard do Modelo",
+            "🛡️ Monitoramento",
+            "ℹ️ Sobre",
+        ]
+        for page in pages:
+            assert page in source, f"Página '{page}' não encontrada no frontend"
+
+
+# ═════════════════════════════════════════════════════════════
+#  9. ENDPOINTS DE MONITORAMENTO (via TestClient do frontend)
+# ═════════════════════════════════════════════════════════════
+class TestMonitoringFromFrontend:
+    """Testa que endpoints de monitoramento respondem corretamente."""
+
+    def test_monitoring_stats_endpoint(self, client):
+        """GET /monitoring/stats retorna 200."""
+        response = client.get("/monitoring/stats")
+        assert response.status_code == 200
+
+    def test_monitoring_predictions_endpoint(self, client):
+        """GET /monitoring/predictions retorna 200."""
+        response = client.get("/monitoring/predictions")
+        assert response.status_code == 200
+        data = response.json()
+        assert "predictions" in data
+        assert "total" in data
+
+    def test_monitoring_drift_endpoint(self, client):
+        """GET /monitoring/drift retorna 200."""
+        response = client.get("/monitoring/drift")
+        assert response.status_code == 200
+        data = response.json()
+        assert "drift_enabled" in data
+        assert "psi_thresholds" in data
