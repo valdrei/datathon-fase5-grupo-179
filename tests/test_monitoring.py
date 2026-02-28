@@ -574,3 +574,223 @@ class TestMonitoringEndpointsEmpty:
         data = r.json()
         assert data["prediction_drift"] == {}
         assert data["drift_enabled"] is False
+
+
+# ═══════════════════════════════════════════════════════
+#  6. TESTES DE DASHBOARD E FUNÇÕES UTILITÁRIAS
+# ═══════════════════════════════════════════════════════
+
+class TestMonitoringDashboard:
+    """Testes para geração de dashboard e funções auxiliares."""
+
+    def test_create_monitoring_dashboard_with_data(self, tmp_path):
+        """Dashboard é gerado com dados presentes."""
+        from src.monitoring import create_monitoring_dashboard
+        
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+        
+        # Criar logger com dados
+        logger = PredictionLogger(log_dir=str(log_dir))
+        for i in range(5):
+            logger.log_prediction(
+                input_data={"INDE 22": 5.0 + i},
+                prediction=-1.0 + i * 0.2,
+                confidence=0.80 + i * 0.03,
+                risk=["Baixo", "Moderado", "Alto"][i % 3],
+            )
+        
+        output_file = tmp_path / "dashboard.html"
+        create_monitoring_dashboard(
+            log_dir=str(log_dir),
+            output_file=str(output_file)
+        )
+        
+        assert output_file.exists()
+        with open(output_file) as f:
+            content = f.read()
+        assert any(variant in content for variant in ["Passos Mágicos", "Passos M", "gicos"])
+        assert "Dashboard" in content
+
+    def test_create_monitoring_dashboard_empty(self, tmp_path):
+        """Dashboard sem dados retorna aviso."""
+        from src.monitoring import create_monitoring_dashboard
+        
+        log_dir = tmp_path / "empty_logs"
+        log_dir.mkdir()
+        
+        output_file = tmp_path / "dashboard.html"
+        create_monitoring_dashboard(
+            log_dir=str(log_dir),
+            output_file=str(output_file)
+        )
+        
+        # Arquivo não deve ser criado quando sem dados
+        # ou contem aviso
+        if output_file.exists():
+            with open(output_file) as f:
+                content = f.read()
+            assert "Sem dados" in content or len(content) == 0
+
+
+def test_generate_risk_bars():
+    """Teste da função _generate_risk_bars."""
+    from src.monitoring import _generate_risk_bars
+    
+    risk_dist = {"Baixo": 10, "Moderado": 5, "Alto": 3, "Crítico": 1}
+    html = _generate_risk_bars(risk_dist)
+    
+    assert "Baixo" in html
+    assert "Moderado" in html
+    assert "Alto" in html
+    assert "Crítico" in html
+    assert "10" in html  # Count for Baixo
+    assert "risk-bar" in html
+
+
+def test_generate_risk_bars_empty():
+    """_generate_risk_bars com dict vazio."""
+    from src.monitoring import _generate_risk_bars
+    
+    html = _generate_risk_bars({})
+    assert "Sem dados" in html
+
+
+# ═══════════════════════════════════════════════════════
+#  7. TESTES DE PSI COM EDGE CASES
+# ═══════════════════════════════════════════════════════
+
+class TestPSIEdgeCases:
+    """Testes de edge cases para cálculo de PSI."""
+
+    def test_calculate_psi_with_single_bucket(self, drift_detector_with_ref):
+        """PSI quando todos os valores caem em um bucket."""
+        expected = pd.Series([5.0] * 100)
+        actual = pd.Series([5.0] * 50)
+        psi = drift_detector_with_ref.calculate_psi(expected, actual)
+        assert isinstance(psi, float)
+
+    def test_calculate_psi_small_series(self, drift_detector_with_ref):
+        """PSI com séries pequenas."""
+        expected = pd.Series([1.0, 2.0, 3.0])
+        actual = pd.Series([1.5, 2.5, 3.5])
+        psi = drift_detector_with_ref.calculate_psi(expected, actual)
+        assert isinstance(psi, float)
+        assert psi >= 0
+
+    def test_detect_drift_missing_columns(self, drift_detector_with_ref):
+        """Drift com colunas faltando."""
+        new_data = pd.DataFrame({"UNKNOWN_COL": [1, 2, 3]})
+        result = drift_detector_with_ref.detect_drift(new_data)
+        assert isinstance(result, bool)
+
+    def test_detect_drift_with_nans(self, drift_detector_with_ref):
+        """Drift lida com NaNs."""
+        new_data = pd.DataFrame({
+            "INDE_22": [np.nan, 5.0, 6.0] * 10,
+            "IDA": [4.0, np.nan, 5.0] * 10,
+            "IEG": [6.5, 7.0, np.nan] * 10,
+        })
+        result = drift_detector_with_ref.detect_drift(new_data)
+        assert isinstance(result, bool)
+
+
+# ═══════════════════════════════════════════════════════
+#  8. TESTES DE PERFORMANCE E MÉTRICAS
+# ═══════════════════════════════════════════════════════
+
+class TestMetricsAndPerformance:
+    """Testes de salva e leitura de métricas."""
+
+    def test_save_and_read_metrics(self, tmp_log_dir):
+        """Metrics são salvos e podem ser lidos."""
+        logger = PredictionLogger(log_dir=tmp_log_dir)
+        metrics = {
+            "r2": 0.87,
+            "rmse": 0.28,
+            "mae": 0.19,
+            "mape": 5.3,
+        }
+        logger.save_metrics(metrics)
+        
+        with open(logger.metrics_file) as f:
+            saved = json.load(f)
+        
+        assert saved["metrics"]["r2"] == 0.87
+        assert saved["metrics"]["rmse"] == 0.28
+        assert "timestamp" in saved
+
+    def test_log_performance_metadata(self, tmp_log_dir):
+        """Performance log com metadados."""
+        monitor = ModelMonitor(log_dir=tmp_log_dir)
+        monitor.log_performance(
+            metrics={"r2": 0.85},
+            metadata={"epoch": 1, "dataset": "test"},
+        )
+        
+        with open(monitor.performance_file) as f:
+            entry = json.loads(f.readline())
+        
+        assert entry["metrics"]["r2"] == 0.85
+        assert entry["metadata"]["epoch"] == 1
+
+    def test_degradation_with_partial_metrics(self, tmp_log_dir):
+        """Degradation check com métricas incompletas."""
+        monitor = ModelMonitor(log_dir=tmp_log_dir)
+        current = {"r2": 0.80, "mae": 0.25}
+        baseline = {"r2": 0.85}  # mae falta
+        
+        # Deve funcionar sem erro
+        result = monitor.check_degradation(current, baseline)
+        assert isinstance(result, bool)
+
+
+# ═══════════════════════════════════════════════════════
+#  9. TESTES DE CONFORMIDADE E INTEGRIDADE
+# ═══════════════════════════════════════════════════════
+
+class TestDataIntegrity:
+    """Testes de integridade de dados no logging."""
+
+    def test_prediction_logger_jsonl_format(self, tmp_log_dir):
+        """Arquivo JSONL mantém formato correto."""
+        logger = PredictionLogger(log_dir=tmp_log_dir)
+        
+        for i in range(10):
+            logger.log_prediction(
+                input_data={"val": i},
+                prediction=float(i),
+                confidence=0.9,
+                risk="Baixo",
+            )
+        
+        # Validar que cada linha é JSON válido
+        with open(logger.predictions_file) as f:
+            for line in f:
+                entry = json.loads(line)
+                assert "timestamp" in entry
+                assert "prediction" in entry
+
+    def test_retention_preserves_most_recent(self, tmp_path):
+        """Retention mantém os registros mais recentes, não aleatórios."""
+        logger = PredictionLogger(
+            log_dir=str(tmp_path),
+            max_records=3,
+        )
+        logger._truncate_interval = 1
+        
+        predictions = [100, 200, 300, 400, 500]
+        for pred in predictions:
+            logger.log_prediction(
+                input_data={"val": pred},
+                prediction=float(pred),
+                confidence=0.9,
+                risk="Baixo",
+            )
+        
+        with open(logger.predictions_file) as f:
+            entries = [json.loads(line) for line in f.readlines()]
+        
+        # Deve manter os últimos 3
+        actual_predictions = [e["prediction"] for e in entries]
+        assert actual_predictions == [300.0, 400.0, 500.0]

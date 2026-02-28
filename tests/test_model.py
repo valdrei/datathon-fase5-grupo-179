@@ -55,7 +55,7 @@ def sample_training_data():
         'IPV': np.random.uniform(3, 10, n_samples),
         'IAN': np.random.uniform(3, 10, n_samples),
         'Fase ideal': [f'Fase {np.random.randint(5, 12)}' for _ in range(n_samples)],
-        'Defasagem': np.random.uniform(-3, 2, n_samples),
+        'Defas': np.random.uniform(-3, 2, n_samples),
         'Indicado': np.random.choice(['Sim', 'Não'], n_samples),
         'Atingiu PV': np.random.choice(['Sim', 'Não'], n_samples),
         'Rec Psicologia': np.random.choice(['Requer avaliação', 'Acompanhamento'], n_samples),
@@ -107,25 +107,21 @@ def test_model_trainer_initialization(model_trainer):
 
 def test_get_model(model_trainer):
     """Testa obtenção de modelo."""
-    model = model_trainer.get_model('random_forest')
+    model_trainer.model_name = 'random_forest'
+    model = model_trainer.get_model()
     assert model is not None
     assert isinstance(model, RandomForestRegressor)
     
-    model = model_trainer.get_model('gradient_boosting')
+    model_trainer.model_name = 'gradient_boosting'
+    model = model_trainer.get_model()
     assert model is not None
 
 
 def test_training_pipeline(sample_training_data, preprocessor, feature_engineer, model_trainer):
     """Testa pipeline completo de treinamento."""
-    # Pré-processar dados
-    df_clean = preprocessor.clean_data(sample_training_data)
-    df_clean = preprocessor.handle_missing_values(df_clean)
-    
-    # Feature engineering
-    df_features = feature_engineer.engineer_features(df_clean)
-    
-    # Preparar features e target
-    X, y = preprocessor.prepare_features_target(df_features)
+    # Feature engineering + pré-processamento completo
+    df_features = feature_engineer.engineer_features(sample_training_data)
+    X, y = preprocessor.preprocess_pipeline(df_features, fit=True)
     
     # Verificar que temos dados
     assert X.shape[0] > 0
@@ -156,10 +152,8 @@ def test_training_pipeline(sample_training_data, preprocessor, feature_engineer,
 def test_model_prediction(sample_training_data, preprocessor, feature_engineer):
     """Testa predição com modelo treinado."""
     # Preparar dados
-    df_clean = preprocessor.clean_data(sample_training_data)
-    df_clean = preprocessor.handle_missing_values(df_clean)
-    df_features = feature_engineer.engineer_features(df_clean)
-    X, y = preprocessor.prepare_features_target(df_features)
+    df_features = feature_engineer.engineer_features(sample_training_data)
+    X, y = preprocessor.preprocess_pipeline(df_features, fit=True)
     
     # Treinar modelo simples
     model = RandomForestRegressor(n_estimators=10, random_state=42, max_depth=5)
@@ -175,10 +169,8 @@ def test_model_prediction(sample_training_data, preprocessor, feature_engineer):
 def test_model_evaluation(sample_training_data, preprocessor, feature_engineer, model_evaluator):
     """Testa avaliação de modelo."""
     # Preparar dados
-    df_clean = preprocessor.clean_data(sample_training_data)
-    df_clean = preprocessor.handle_missing_values(df_clean)
-    df_features = feature_engineer.engineer_features(df_clean)
-    X, y = preprocessor.prepare_features_target(df_features)
+    df_features = feature_engineer.engineer_features(sample_training_data)
+    X, y = preprocessor.preprocess_pipeline(df_features, fit=True)
     
     # Dividir dados
     X_train, X_test, y_train, y_test = train_test_split(
@@ -215,40 +207,41 @@ def test_model_confidence_assessment(model_evaluator):
     high_confidence_metrics = {
         'r2': 0.85,
         'mae': 0.3,
-        'accuracy_within_0.5': 0.75
+        'accuracy_within_tolerance': 75.0
     }
+    model_evaluator.metrics = high_confidence_metrics
     
-    confidence = model_evaluator.get_model_confidence_message(high_confidence_metrics)
+    confidence = model_evaluator.get_model_confidence_message()
     assert 'ALTA CONFIANÇA' in confidence
     
     # Métricas de confiança moderada
     moderate_confidence_metrics = {
         'r2': 0.60,
         'mae': 0.5,
-        'accuracy_within_0.5': 0.55
+        'accuracy_within_tolerance': 55.0
     }
+    model_evaluator.metrics = moderate_confidence_metrics
     
-    confidence = model_evaluator.get_model_confidence_message(moderate_confidence_metrics)
+    confidence = model_evaluator.get_model_confidence_message()
     assert 'MODERADA' in confidence
     
     # Métricas baixas
     low_confidence_metrics = {
         'r2': 0.40,
         'mae': 0.8,
-        'accuracy_within_0.5': 0.40
+        'accuracy_within_tolerance': 40.0
     }
+    model_evaluator.metrics = low_confidence_metrics
     
-    confidence = model_evaluator.get_model_confidence_message(low_confidence_metrics)
+    confidence = model_evaluator.get_model_confidence_message()
     assert 'REQUER MELHORIAS' in confidence or 'MELHORIAS' in confidence
 
 
 def test_feature_importance(sample_training_data, preprocessor, feature_engineer):
     """Testa extração de feature importance."""
     # Preparar dados
-    df_clean = preprocessor.clean_data(sample_training_data)
-    df_clean = preprocessor.handle_missing_values(df_clean)
-    df_features = feature_engineer.engineer_features(df_clean)
-    X, y = preprocessor.prepare_features_target(df_features)
+    df_features = feature_engineer.engineer_features(sample_training_data)
+    X, y = preprocessor.preprocess_pipeline(df_features, fit=True)
     
     # Treinar modelo
     model = RandomForestRegressor(n_estimators=10, random_state=42, max_depth=5)
@@ -264,31 +257,27 @@ def test_feature_importance(sample_training_data, preprocessor, feature_engineer
 def test_cross_validation(sample_training_data, preprocessor, feature_engineer, model_trainer):
     """Testa cross-validation."""
     # Preparar dados
-    df_clean = preprocessor.clean_data(sample_training_data)
-    df_clean = preprocessor.handle_missing_values(df_clean)
-    df_features = feature_engineer.engineer_features(df_clean)
-    X, y = preprocessor.prepare_features_target(df_features)
+    df_features = feature_engineer.engineer_features(sample_training_data)
+    X, y = preprocessor.preprocess_pipeline(df_features, fit=True)
     
     # Criar modelo simples
     model = RandomForestRegressor(n_estimators=5, random_state=42, max_depth=3)
     
     # Executar cross-validation
-    cv_results = model_trainer.cross_validate(model, X, y, cv=3)
+    model_trainer.model = model
+    cv_results = model_trainer.cross_validate(X, y, cv=3)
     
     # Verificar resultados
-    assert 'fit_time' in cv_results
-    assert 'test_neg_mean_squared_error' in cv_results
-    assert 'test_r2' in cv_results
-    assert len(cv_results['fit_time']) == 3  # 3 folds
+    assert 'cv_mse_mean' in cv_results
+    assert 'cv_mae_mean' in cv_results
+    assert 'cv_r2_mean' in cv_results
 
 
 def test_model_persistence(sample_training_data, preprocessor, feature_engineer, tmp_path):
     """Testa salvamento e carregamento de modelo."""
     # Preparar dados
-    df_clean = preprocessor.clean_data(sample_training_data)
-    df_clean = preprocessor.handle_missing_values(df_clean)
-    df_features = feature_engineer.engineer_features(df_clean)
-    X, y = preprocessor.prepare_features_target(df_features)
+    df_features = feature_engineer.engineer_features(sample_training_data)
+    X, y = preprocessor.preprocess_pipeline(df_features, fit=True)
     
     # Treinar modelo
     model = RandomForestRegressor(n_estimators=10, random_state=42, max_depth=5)
@@ -315,10 +304,8 @@ def test_model_persistence(sample_training_data, preprocessor, feature_engineer,
 def test_prediction_bounds(sample_training_data, preprocessor, feature_engineer):
     """Testa se predições estão dentro de limites razoáveis."""
     # Preparar dados
-    df_clean = preprocessor.clean_data(sample_training_data)
-    df_clean = preprocessor.handle_missing_values(df_clean)
-    df_features = feature_engineer.engineer_features(df_clean)
-    X, y = preprocessor.prepare_features_target(df_features)
+    df_features = feature_engineer.engineer_features(sample_training_data)
+    X, y = preprocessor.preprocess_pipeline(df_features, fit=True)
     
     # Treinar modelo
     model = RandomForestRegressor(n_estimators=10, random_state=42, max_depth=5)
@@ -345,10 +332,8 @@ def test_error_handling_invalid_data():
 def test_model_reproducibility(sample_training_data, preprocessor, feature_engineer):
     """Testa reprodutibilidade do modelo com random_state."""
     # Preparar dados
-    df_clean = preprocessor.clean_data(sample_training_data)
-    df_clean = preprocessor.handle_missing_values(df_clean)
-    df_features = feature_engineer.engineer_features(df_clean)
-    X, y = preprocessor.prepare_features_target(df_features)
+    df_features = feature_engineer.engineer_features(sample_training_data)
+    X, y = preprocessor.preprocess_pipeline(df_features, fit=True)
     
     # Treinar primeiro modelo
     model1 = RandomForestRegressor(n_estimators=10, random_state=42, max_depth=5)
