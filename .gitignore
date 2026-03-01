@@ -55,8 +55,10 @@ Thumbs.db
 # Test
 .pytest_cache/
 coverage.json
+coverage.xml
 pytest.ini
 .coverage
+.coverage.*
 .coveragerc
 htmlcov/
 .tox/
