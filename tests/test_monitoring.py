@@ -440,12 +440,15 @@ class TestMonitoringEndpoints:
         assert r.status_code == 200
 
     def test_monitoring_predictions_structure(self, client_with_monitoring):
-        """Resposta contém lista de predições."""
+        """Resposta contém lista de predições e summary."""
         data = client_with_monitoring.get("/monitoring/predictions").json()
         assert "predictions" in data
         assert "total" in data
+        assert "summary" in data
         assert isinstance(data["predictions"], list)
         assert data["total"] == 15
+        assert "mean_confidence" in data["summary"]
+        assert "risk_distribution" in data["summary"]
 
     def test_monitoring_predictions_entry_fields(self, client_with_monitoring):
         """Cada predição tem os campos corretos."""
@@ -472,14 +475,14 @@ class TestMonitoringEndpoints:
         """Resposta contém campos esperados."""
         data = client_with_monitoring.get("/monitoring/drift").json()
         assert "drift_enabled" in data
-        assert "psi" in data
-        assert "psi_thresholds" in data
-        assert "prediction_drift" in data
+        assert "analysis" in data
+        assert "thresholds" in data
+        assert "warnings" in data
 
     def test_monitoring_drift_thresholds(self, client_with_monitoring):
-        """Thresholds de PSI estão presentes."""
+        """Thresholds estão presentes."""
         data = client_with_monitoring.get("/monitoring/drift").json()
-        thresholds = data["psi_thresholds"]
+        thresholds = data["thresholds"]
         assert "no_change" in thresholds
         assert "moderate" in thresholds
         assert "significant" in thresholds
@@ -487,7 +490,9 @@ class TestMonitoringEndpoints:
     def test_monitoring_drift_prediction_analysis(self, client_with_monitoring):
         """Com >= 10 predições, análise de drift está presente."""
         data = client_with_monitoring.get("/monitoring/drift").json()
-        pred_drift = data["prediction_drift"]
+        analysis = data["analysis"]
+        assert "prediction_drift" in analysis
+        pred_drift = analysis["prediction_drift"]
         assert "first_half_mean" in pred_drift
         assert "second_half_mean" in pred_drift
         assert "mean_shift" in pred_drift
@@ -572,5 +577,6 @@ class TestMonitoringEndpointsEmpty:
         r = client_empty.get("/monitoring/drift")
         assert r.status_code == 200
         data = r.json()
-        assert data["prediction_drift"] == {}
+        assert "analysis" in data
         assert data["drift_enabled"] is False
+        assert data["analysis"]["prediction_drift"] == {}
