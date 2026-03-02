@@ -1,5 +1,5 @@
 # ===== BUILDER STAGE =====
-FROM python:3.11-slim as builder
+FROM python:3.11-slim AS builder
 
 # Set working directory
 WORKDIR /app
@@ -55,4 +55,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
 # Iniciar ambos os serviços
-CMD ["bash", "start.sh"]
+ENTRYPOINT ["bash"]
+CMD ["start.sh"]
