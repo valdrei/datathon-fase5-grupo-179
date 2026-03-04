@@ -11,7 +11,6 @@ import logging
 from datetime import datetime
 from typing import Dict, Any, Optional
 from scipy import stats
-import joblib
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -38,7 +37,7 @@ class PredictionLogger:
         self._truncate_interval = 100  # verifica a cada N escritas
         
     def log_prediction(self, input_data: Dict, prediction: float, 
-                      confidence: float, risk: str) -> None:
+                      confidence: float, risk: str, timestamp: Optional[datetime] = None) -> None:
         """
         Registra uma predição.
         
@@ -47,19 +46,17 @@ class PredictionLogger:
             prediction: Valor predito
             confidence: Confiança da predição
             risk: Nível de risco
+            timestamp: Timestamp opcional (usa now() se não fornecido)
         """
+        if timestamp is None:
+            timestamp = datetime.now()
+        
         log_entry = {
-            'timestamp': datetime.now().isoformat(),
+            'timestamp': timestamp.isoformat(),
             'prediction': prediction,
             'confidence': confidence,
             'risk': risk,
-            'input_data': {
-                'INDE_22': input_data.get('INDE 22'),
-                'IDA': input_data.get('IDA'),
-                'IEG': input_data.get('IEG'),
-                'Fase': input_data.get('Fase'),
-                'Idade_22': input_data.get('Idade 22')
-            }
+            'input_data': input_data  # Logar todos os dados de entrada para detecção de drift
         }
         
         # Append ao arquivo JSONL

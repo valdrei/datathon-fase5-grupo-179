@@ -378,7 +378,7 @@ async def monitoring_stats(last_n: Optional[int] = None):
 @router.get("/monitoring/predictions")
 async def monitoring_predictions(last_n: int = 100):
     """
-    Retorna o histórico das últimas predições para visualização temporal.
+    Retorna o histórico das últimas predições com análise temporal.
     
     Args:
         last_n: Número de últimas predições a retornar (padrão: 100)
@@ -390,7 +390,14 @@ async def monitoring_predictions(last_n: int = 100):
         raise HTTPException(status_code=503, detail="Logger de predições não inicializado.")
     
     if not prediction_logger.predictions_file.exists():
-        return {"predictions": [], "total": 0}
+        return {
+            "predictions": [], 
+            "total": 0,
+            "summary": {
+                "mean_confidence": 0,
+                "risk_distribution": {}
+            }
+        }
     
     predictions = []
     with open(prediction_logger.predictions_file, 'r') as f:
@@ -403,47 +410,90 @@ async def monitoring_predictions(last_n: int = 100):
     # Retornar apenas as últimas N
     predictions = predictions[-last_n:]
     
-    return {"predictions": predictions, "total": len(predictions)}
+    # Calcular estatísticas
+    if predictions:
+        confidences = [p.get('confidence', 0) for p in predictions]
+        risks = [p.get('risk', 'N/A') for p in predictions]
+        
+        risk_dist = {}
+        for risk in risks:
+            risk_dist[risk] = risk_dist.get(risk, 0) + 1
+        
+        summary = {
+            "mean_confidence": round(float(np.mean(confidences)), 3),
+            "risk_distribution": risk_dist,
+            "mean_prediction": round(float(np.mean([p.get('prediction', 0) for p in predictions])), 3),
+            "std_prediction": round(float(np.std([p.get('prediction', 0) for p in predictions])), 3),
+        }
+    else:
+        summary = {
+            "mean_confidence": 0,
+            "risk_distribution": {},
+            "mean_prediction": 0,
+            "std_prediction": 0
+        }
+    
+    return {
+        "predictions": predictions, 
+        "total": len(predictions),
+        "summary": summary
+    }
 
 
 @router.get("/monitoring/drift")
 async def monitoring_drift():
     """
-    Retorna o relatório de drift (PSI) comparando predições recentes
-    com dados de referência.
+    Retorna análise de drift (PSI e mudança de distribuição)
+    comparando predições recentes com dados de referência.
     """
     from app.main import prediction_logger, drift_detector
     import json as _json
+    from scipy import stats as sp_stats
     
     result = {
         "drift_enabled": False,
-        "psi": {},
-        "psi_thresholds": {
+        "analysis": {
+            "data_drift": {},
+            "prediction_drift": {},
+            "feature_drift": {}
+        },
+        "thresholds": {
             "no_change": "< 0.10",
             "moderate": "0.10 – 0.25",
             "significant": "> 0.25"
         },
-        "prediction_drift": {}
+        "warnings": []
     }
     
-    # Análise de drift nas predições (usando distribuição temporal)
+    # Análise de drift nas predições
     if prediction_logger and prediction_logger.predictions_file.exists():
         predictions = []
+        input_features = {}
+        
         with open(prediction_logger.predictions_file, 'r') as f:
             for line in f:
                 try:
-                    predictions.append(_json.loads(line))
+                    pred = _json.loads(line)
+                    predictions.append(pred)
+                    
+                    # Extrair features numéricas
+                    if 'input_data' in pred:
+                        for key, val in pred['input_data'].items():
+                            if isinstance(val, (int, float)):
+                                if key not in input_features:
+                                    input_features[key] = []
+                                input_features[key].append(val)
                 except _json.JSONDecodeError:
                     continue
         
         if len(predictions) >= 10:
+            # DRIFT NAS PREDIÇÕES
             pred_values = [p['prediction'] for p in predictions]
             mid = len(pred_values) // 2
             first_half = pred_values[:mid]
             second_half = pred_values[mid:]
             
-            # Estatísticas comparativas
-            result["prediction_drift"] = {
+            result["analysis"]["prediction_drift"] = {
                 "first_half_mean": round(float(np.mean(first_half)), 4),
                 "second_half_mean": round(float(np.mean(second_half)), 4),
                 "first_half_std": round(float(np.std(first_half)), 4),
@@ -452,22 +502,50 @@ async def monitoring_drift():
                 "total_predictions": len(pred_values)
             }
             
-            # Teste KS entre as duas metades
-            from scipy import stats as sp_stats
+            # Teste KS
             try:
                 ks_stat, ks_pvalue = sp_stats.ks_2samp(first_half, second_half)
-                result["prediction_drift"]["ks_statistic"] = round(float(ks_stat), 4)
-                result["prediction_drift"]["ks_pvalue"] = round(float(ks_pvalue), 4)
-                result["prediction_drift"]["drift_detected"] = bool(ks_pvalue < 0.05)
-            except Exception:
-                result["prediction_drift"]["drift_detected"] = False
+                result["analysis"]["prediction_drift"]["ks_statistic"] = round(float(ks_stat), 4)
+                result["analysis"]["prediction_drift"]["ks_pvalue"] = round(float(ks_pvalue), 4)
+                
+                if ks_pvalue < 0.05:
+                    result["analysis"]["prediction_drift"]["drift_detected"] = True
+                    result["warnings"].append("⚠️ Drift significativo detectado nas PREDIÇÕES (p-value < 0.05)")
+                else:
+                    result["analysis"]["prediction_drift"]["drift_detected"] = False
+            except Exception as e:
+                result["analysis"]["prediction_drift"]["drift_detected"] = False
+                result["analysis"]["prediction_drift"]["error"] = str(e)
+            
+            # DRIFT NAS FEATURES DE ENTRADA
+            for feature, values in input_features.items():
+                if len(values) >= 10:
+                    mid_feat = len(values) // 2
+                    first_feat = values[:mid_feat]
+                    second_feat = values[mid_feat:]
+                    
+                    try:
+                        ks_stat, ks_pvalue = sp_stats.ks_2samp(first_feat, second_feat)
+                        
+                        result["analysis"]["feature_drift"][feature] = {
+                            "ks_statistic": round(float(ks_stat), 4),
+                            "ks_pvalue": round(float(ks_pvalue), 4),
+                            "drift_detected": bool(ks_pvalue < 0.05),
+                            "mean_shift": round(float(np.mean(second_feat) - np.mean(first_feat)), 4)
+                        }
+                        
+                        if ks_pvalue < 0.05:
+                            result["warnings"].append(f"⚠️ Drift em '{feature}' (p-value={ks_pvalue:.4f})")
+                    except Exception:
+                        pass
     
     # PSI por feature (se drift_detector tem dados de referência)
     if drift_detector and drift_detector.reference_data is not None:
         result["drift_enabled"] = True
-        # PSI seria calculado quando novos dados chegam em lote
-        # Por enquanto, retornar status
-        result["reference_rows"] = len(drift_detector.reference_data)
+        result["analysis"]["data_drift"]["reference_rows"] = len(drift_detector.reference_data)
+        result["analysis"]["data_drift"]["status"] = "Dados de referência carregados"
+    else:
+        result["analysis"]["data_drift"]["status"] = "Dados de referência não encontrados"
     
     return result
 

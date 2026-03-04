@@ -771,3 +771,4 @@ elif page == "ℹ️ Sobre":
 
     st.markdown("---")
     st.caption("Passos Mágicos © 2026 – Projeto acadêmico FIAP")
+

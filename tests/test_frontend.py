@@ -445,4 +445,6 @@ class TestMonitoringFromFrontend:
         assert response.status_code == 200
         data = response.json()
         assert "drift_enabled" in data
-        assert "psi_thresholds" in data
+        assert "thresholds" in data
+        assert "analysis" in data
+        assert "warnings" in data
