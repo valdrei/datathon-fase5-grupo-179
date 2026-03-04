@@ -766,7 +766,15 @@ elif page == "ℹ️ Sobre":
 
     ### 👥 Equipe
 
-    Pós-Graduação em Data Analytics – FIAP 2024/2026
+    Pós-Graduação em Machine Learning Engineering – FIAP 2025/2026
+
+    | Nome | E-mail |
+    |------|--------|
+    | Mateus Adriano Ventura Vieira | mateusavv13@gmail.com |
+    | Lucas Corrêa e Castro Sanchez | lccsanchez16@gmail.com |
+    | Isabela Pamplona Trindade | isabelaptrindade@gmail.com |
+    | Valdrei Salomão da Silva | valdreisalomao@hotmail.com |
+    | Fernando Zoé | fernandozoe180@yahoo.com |
     """)
 
     st.markdown("---")
