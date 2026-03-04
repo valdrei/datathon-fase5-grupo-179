@@ -4,8 +4,10 @@ __pycache__/
 *$py.class
 *.so
 .Python
+.python-version
 env/
 venv/
+.venv/
 ENV/
 build/
 develop-eggs/
@@ -52,7 +54,12 @@ Thumbs.db
 
 # Test
 .pytest_cache/
+coverage.json
+coverage.xml
+pytest.ini
 .coverage
+.coverage.*
+.coveragerc
 htmlcov/
 .tox/
 
